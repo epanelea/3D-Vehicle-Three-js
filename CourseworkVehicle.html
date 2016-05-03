@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+
+<html>
+
+    <head>
+        <title>Coursework Vehicle</title>
+        <script type="text/javascript" src="../libs/three.js"></script>
+        <script type="text/javascript" src="../libs/jquery.js"></script>
+        <script type="text/javascript" src="../libs/stats.js"></script>
+        <script type="text/javascript" src="../libs/dat.gui.js"></script>
+        <script type="text/javascript" src="../libs/chroma.js"></script>
+        <script type="text/javascript" src="../libs/keypress.js"></script>
+
+        <style>
+            body{
+                /* set margin to 0 and overflow to hidden, to go fullscreen */
+                margin: 0;
+                overflow: hidden;
+            }
+        </style>
+    </head>
+    <body>
+
+        <div id="Stats-output">
+        </div>
+        <!-- Div which will hold the Output -->
+        <div id="WebGL-output">
+        </div>
+
+        <!-- Javascript code that runs our Three.js project-->
+        <script type="text/javascript">
+            alert("use wasd controls to navigate the camera and arrow controls to move the vehicle, and mouse to use the user interface");
+
+            // once everything is loaded, we run our Three.js stuff.
+            $(function () {
+
+                var stats = initStats();
+
+                // create a scene, that will hold all our elements such as objects, cameras and lights.
+                var scene = new THREE.Scene();
+
+                // create a camera, which defines where we're looking at.
+                var camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+                // create a render and set the size
+                var renderer = new THREE.WebGLRenderer();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.shadowMap.enabled = true;
+
+                // create the ground plane
+                var plane = createMesh(new THREE.CircleGeometry(200, 40), "Road3.jpg");
+
+                // rotate and position the plane
+                plane.rotation.x = -0.5 * Math.PI;
+
+                // add the plane to the scene
+                scene.add(plane);
+
+                // position and point the camera to the center of the scene
+                camera.position.x = 0;
+                camera.position.y = 30;
+                camera.position.z = 75;
+
+                // add spotlight for the shadows
+                var spotLight = new THREE.SpotLight(0xffffff);
+                spotLight.position.set(75, 100, 75);
+                spotLight.castShadow = true;
+                spotLight.angle = Math.PI / 2;
+                spotLight.intensity = 2;
+                scene.add(spotLight);
+
+                var textureCube = createCubeMap("parliament");
+                var shader = THREE.ShaderLib[ "cube" ];
+                shader.uniforms[ "tCube" ].value = textureCube;
+                var loader = new THREE.TextureLoader();
+
+                //car Material
+                var carTexture = loader.load("../assets/textures/general/916.jpg");
+                var carNormalMap = loader.load("../assets/textures/general/4981-normal.jpg");
+                var carMaterial = new THREE.MeshPhongMaterial();
+                carMaterial.map = carTexture;
+                carMaterial.normalMap = carNormalMap;
+                carMaterial.envMap = textureCube;
+
+                //other materials
+                var carTexture2 = loader.load("../assets/textures/general/915.jpg");
+                var carNormalMap2 = loader.load("../assets/textures/general/4981-normal.jpg");
+                var carTexture3 = loader.load("../assets/textures/general/11224.jpg");
+                var carNormalMap3 = loader.load("../assets/textures/general/11224-normal.jpg");
+                var carTexture4 = loader.load("../assets/textures/general/6554.jpg");
+                var carNormalMap4 = loader.load("../assets/textures/general/6554-normal.jpg");
+
+                //tire Material
+                var tireTexture = loader.load("../assets/textures/general/3610.jpg");
+                var tireNormalMap = loader.load("../assets/textures/general/3610-normal.jpg");
+                var tireMaterial = new THREE.MeshPhongMaterial();
+                tireMaterial.map = tireTexture;
+                tireMaterial.normalMap = tireNormalMap;
+
+                //headlight material
+                var headlightTexture = loader.load("../assets/textures/general/6056.jpg");
+                var headlightNormalMap = loader.load("../assets/textures/general/1511-normal.jpg");
+                var headlightMaterial = new THREE.MeshPhongMaterial();
+                headlightMaterial.map = headlightTexture;
+                headlightMaterial.normalMap = headlightNormalMap;
+                headlightMaterial.shininess = 16;
+                headlightMaterial.envMap = textureCube;
+
+                // vehicle creation starts here
+
+                // Create the wheels and poles.
+                var wheel = new THREE.Mesh(// This is a tire
+                        new THREE.TorusGeometry(0.75, 0.25, 16, 32),
+                        tireMaterial
+                        );
+
+                var silver1 = new THREE.MeshPhongMaterial({// silver color
+                    color: 0x8899a9,
+                    specular: 0xffffff,
+                    shininess: 16
+                });
+
+                var cylinder = new THREE.Mesh(// a silver cylinder 
+                        new THREE.CylinderGeometry(0.5, 0.5, 1, 32, 1),
+                        silver1
+                        );
+                
+                cylinder.scale.set(0.15, 1.2, 0.15);
+                wheel.add(cylinder.clone());
+                cylinder.rotation.z = Math.PI / 3;  // Adds a rotation about the z-axis 
+                wheel.add(cylinder.clone());
+                cylinder.rotation.z = -Math.PI / 3;
+                wheel.add(cylinder.clone());
+
+                baseModel = new THREE.Object3D();     // A model containing two wheels and a cylinder.
+                cylinder.scale.set(0.2, 4.3, 0.2);
+                cylinder.rotation.set(Math.PI / 2, 0, 0);
+                baseModel.add(cylinder);
+                wheel.position.z = 2;
+                baseModel.add(wheel.clone());
+                wheel.position.z = -2;
+                baseModel.add(wheel);
+
+                // Creates a car, consisting of two boxes, two spheres for the headlights, and two poles.
+                carModel = new THREE.Object3D();
+                var body = new THREE.Mesh(new THREE.BoxGeometry(6, 1.2, 3), carMaterial);
+                body.position.y = 0.6;
+                var hood = new THREE.Mesh(new THREE.BoxGeometry(3, 1.3, 2.8), carMaterial);
+                hood.position.set(0.5, 1.4, 0);
+
+                //headlights
+                headlights = new THREE.Object3D();
+                var headlight1 = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 8), headlightMaterial);
+                headlight1.scale.set(0.1, 0.25, 0.25);
+                headlight1.position.set(-3, 0.6, -1);
+                var headlight2 = headlight1.clone();
+                headlight1.position.set(-3, 0.6, 1);
+                var light = new THREE.PointLight("#FDEA7B");
+                light.position.set(-3, 0.6, -1);
+                var light2 = light.clone();
+                light.position.set(-3, 0.6, 1);
+                light.castShadow = true;
+                light.distance = 5;
+                light.intensity = 2;
+                headlight1.add(light);
+                headlight2.add(light2);
+                headlights.add(headlight1);
+                headlights.add(headlight2);
+
+                carAxle1 = baseModel.clone();
+                carAxle1.position.x = -2.5;
+                carAxle2 = baseModel.clone();
+                carAxle2.position.x = 2.5;
+                carModel.add(carAxle1);
+                carModel.add(carAxle2);
+                carModel.add(body);
+                carModel.add(hood);
+                carModel.add(headlights);
+
+                carModel.scale.set(5, 5, 5);
+                carModel.position.set(0, 5, -4);
+
+                scene.add(carModel);
+
+                // add the output of the renderer to the html element
+                $("#WebGL-output").append(renderer.domElement);
+
+                // setup the control gui
+                var controls = new function () {
+                    this.changeTexture = "red";
+                    this.rotate = false;
+                    this.wireframe = carMaterial.wireframe, tireMaterial.wireframe, headlightMaterial.wireframe, silver1.wireframe;
+
+                    this.changeTexture = function (e) {
+                        switch (e) {
+                            case "red":
+                                setTextures(carTexture, carNormalMap);
+                                break;
+                            case "gold":
+                                setTextures(carTexture2, carNormalMap2);
+                                break;
+                            case "green":
+                                setTextures(carTexture3, carNormalMap3);
+                                break;
+                            case "silver":
+                                setTextures(carTexture4, carNormalMap4);
+                                break;
+                        }
+                    };
+
+                    function setTextures(texture, normalMap) {
+                        body.material.map = texture;
+                        body.material.normalMap = normalMap;
+                        hood.material.map = texture;
+                        hood.material.normalMap = normalMap;
+                    }
+                };
+
+                function createCubeMap(name) {
+
+                    var path = "../assets/textures/cubemap/" + name + "/";
+                    var format = '.jpg';
+                    var urls = [
+                        path + 'posx' + format, path + 'negx' + format,
+                        path + 'posy' + format, path + 'negy' + format,
+                        path + 'posz' + format, path + 'negz' + format
+                    ];
+
+                    var textureCube = new THREE.CubeTextureLoader().load(urls, THREE.CubeReflectionMapping);
+                    return textureCube;
+                }
+
+                // car controls
+                var keysDown = {}; //empty object to store which keys are being held down
+
+                window.addEventListener("keydown", function (event) {
+                    keysDown[event.keyCode] = true; //create a property  for the key being pressed
+                });
+
+                window.addEventListener("keyup", function (event) {
+                    delete  keysDown[event.keyCode];
+                });
+
+                function checkKeys() {
+                    if (keysDown[87]) { //w
+                        camera.translateZ(-0.5);
+                    }
+                    if (keysDown[83]) { //s
+                        camera.translateZ(0.5);
+                    }
+                    if (keysDown[65]) { //a
+                        camera.translateX(-0.5);
+                    }
+                    if (keysDown[68]) { //d
+                        camera.translateX(0.5);
+                    }
+                    if (keysDown[37]) { //left
+                        carModel.rotation.y -= 0.02;
+                    }
+                    if (keysDown[39]) { //right
+                        carModel.rotation.y += 0.02;
+                    }
+                    if (keysDown[38]) { //up
+                        carModel.position.x -= 0.5 * Math.cos(camera.rotation.y, carModel.rotation.y);
+                        carModel.position.z -= 0.5 * Math.sin(camera.rotation.y, carModel.rotation.y);
+                        carAxle1.rotation.z += 0.1;
+                        carAxle2.rotation.z += 0.1;
+                    }
+                    if (keysDown[40]) { //down
+                        carModel.position.x += 0.5 * Math.cos(camera.rotation.y, carModel.rotation.y);
+                        carModel.position.z += 0.5 * Math.sin(camera.rotation.y, carModel.rotation.y);
+                        carAxle1.rotation.z += 0.1;
+                        carAxle2.rotation.z += 0.1;
+                    }
+                }
+
+                var gui = new dat.GUI();
+                gui.add(controls, "changeTexture", ['red', 'gold', 'green', 'silver']).onChange(controls.changeTexture);
+                gui.add(controls, "rotate");
+                gui.add(controls, "wireframe").onChange(function (e) {
+                    carMaterial.wireframe = e, tireMaterial.wireframe = e, headlightMaterial.wireframe = e, silver1.wireframe = e;
+                });
+
+                render();
+
+                function render() {
+                    checkKeys();
+                    stats.update();
+                    if (controls.rotate) {
+                        carModel.rotation.y += 0.01;
+                    }
+
+                    camera.lookAt(carModel.position);
+
+                    // render using requestAnimationFrame
+                    requestAnimationFrame(render);
+                    renderer.render(scene, camera);
+                }
+
+                function createMesh(geom, imageFile) {
+                    var material = new THREE.MeshPhongMaterial();
+
+                    var texture = new THREE.TextureLoader().load("../assets/textures/" + imageFile);
+                    material.map = texture;
+
+                    var mesh = new THREE.Mesh(geom, material);
+
+                    return mesh;
+                }
+
+                function initStats() {
+
+                    var stats = new Stats();
+
+                    stats.setMode(0); // 0: fps, 1: ms
+
+                    // Align top-left
+                    stats.domElement.style.position = 'absolute';
+                    stats.domElement.style.left = '0px';
+                    stats.domElement.style.top = '0px';
+
+                    $("#Stats-output").append(stats.domElement);
+
+                    return stats;
+                }
+            });
+
+        </script>
+    </body>
+</html>
